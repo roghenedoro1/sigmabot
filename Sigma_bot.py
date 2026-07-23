@@ -14,7 +14,9 @@ YOUR_ID = 5564269252
 PAIRS = {"EURUSD": "EURUSD=X","GBPUSD": "GBPUSD=X","GBPJPY": "GBPJPY=X","XAUUSD": "XAUUSD=X"}
 RESULTS = []
 
-def load_results(): return RESULTS
+def load_results():
+    return RESULTS
+
 def save_results(data):
     global RESULTS
     RESULTS = data
@@ -88,20 +90,22 @@ async def send_signals(context: ContextTypes.DEFAULT_TYPE):
     await generate_forest_signal(context, YOUR_ID) # Auto every 10mins
 
 def main():
+    PORT = int(os.environ.get('PORT', 10000))
+
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.job_queue.run_repeating(send_signals, interval=600, first=30)
-    logging.info("Bot is running...")
-    
 
-# NEW
-PORT = int(os.environ.get('PORT', 10000))
-app.run_webhook(
-    listen="0.0.0.0",
-    port=PORT,
-    url_path=os.environ.get('TOKEN'),
-    webhook_url=f"https://your-render-url.onrender.com/{os.environ.get('TOKEN')}"
-)
+    logging.info("Bot is running with WEBHOOK...")
 
-if __name__ == '__main__': main()
+    # WEBHOOK instead of polling
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=TOKEN,
+        webhook_url=f"https://srv-d9h329u7r5hc73968v90.onrender.com/{TOKEN}"
+    )
+
+if __name__ == '__main__':
+    main()

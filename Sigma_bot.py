@@ -1,55 +1,41 @@
 import os
 import asyncio
+from flask import Flask, request
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes
 
+# --- CONFIG ---
 TOKEN = os.getenv("TELEGRAM_TOKEN")
+PORT = int(os.getenv("PORT", 10000))  # Render sets PORT automatically
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # we will set this
 
-AUTO_USERS = set()
+app = Flask(__name__)
 
+# Create the bot application
+application = Application.builder().token(TOKEN).build()
+
+# --- YOUR HANDLERS GO HERE ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 Welcome to Sigma Bot!\n\n"
-        "Commands:\n"
-        "/start - Show this message\n"
-        "/auto - Turn on 5min EURUSD signals\n"
-        "/stop - Turn off signals"
-    )
+    await update.message.reply_text("Bot is alive! Webhook mode working ✅")
 
-async def auto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    AUTO_USERS.add(user_id)
-    await update.message.reply_text("✅ Auto signals ON. You will get EURUSD alerts every 5 minutes.")
-    asyncio.create_task(send_signals(context.application))
+application.add_handler(CommandHandler("start", start))
+# --- END HANDLERS ---
 
-async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    AUTO_USERS.discard(user_id)
-    await update.message.reply_text("🛑 Auto signals OFF.")
+@app.route(f"/{TOKEN}", methods=["POST"])
+async def webhook():
+    """Handle incoming updates from Telegram"""
+    await application.update_queue.put(Update.de_json(data=request.json, bot=application.bot))
+    return "ok"
 
-async def send_signals(app):
-    while True:
-        await asyncio.sleep(300)
-        for user_id in list(AUTO_USERS):
-            try:
-                signal = "EURUSD: Waiting for setup... No trade now."
-                await app.bot.send_message(chat_id=user_id, text=signal)
-            except Exception as e:
-                print(f"Error sending to {user_id}: {e}")
+@app.route("/")
+def index():
+    return "Bot is running"
 
-def main():
-    if not TOKEN:
-        print("ERROR: TELEGRAM_TOKEN environment variable not set!")
-        return
-    
-    print("Bot starting...")
-    app = ApplicationBuilder().token(TOKEN).build()
-    
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("auto", auto))
-    app.add_handler(CommandHandler("stop", stop))
-    
-    app.run_polling()
+async def set_webhook():
+    await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
 
 if __name__ == "__main__":
-    main()
+    # Set webhook when the server starts
+    asyncio.run(set_webhook())
+    # Run with gunicorn on Render. Locally you can use app.run
+    app.run(host="0.0.0.0", port=PORT)

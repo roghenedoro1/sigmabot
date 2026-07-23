@@ -93,6 +93,15 @@ def main():
     app.add_handler(CallbackQueryHandler(button))
     app.job_queue.run_repeating(send_signals, interval=600, first=30)
     logging.info("Bot is running...")
-    app.run_polling()
+    # OLD
+
+# NEW
+PORT = int(os.environ.get('PORT', 10000))
+app.run_webhook(
+    listen="0.0.0.0",
+    port=PORT,
+    url_path=os.environ.get('TOKEN'),
+    webhook_url=f"https://your-render-url.onrender.com/{os.environ.get('TOKEN')}"
+)
 
 if __name__ == '__main__': main()

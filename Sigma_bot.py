@@ -1,4 +1,9 @@
 import os
+import logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
+    level=logging.INFO
+)
+logging.info("Bot starting...") os
 import asyncio
 from flask import Flask, request
 from telegram import Update
@@ -11,7 +16,9 @@ app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Bot is alive! ✅")
+    logging.info(f"Received /start from {update.effective_user.id}")
+    await update.message.reply_text("Bot is alive! ✅")
+    logging.info("Sent reply successfully")
 
 application.add_handler(CommandHandler("start", start))
 

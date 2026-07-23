@@ -93,7 +93,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button))
     app.job_queue.run_repeating(send_signals, interval=600, first=30)
     logging.info("Bot is running...")
-    # OLD
+    
 
 # NEW
 PORT = int(os.environ.get('PORT', 10000))

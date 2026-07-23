@@ -6,7 +6,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 logging.basicConfig(level=logging.INFO)
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-ADMIN_CHAT_ID = "123456789" # Replace with your Telegram ID so support messages reach you
+ADMIN_CHAT_ID = "5564269252" # Replace with your Telegram ID so support messages reach you
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [

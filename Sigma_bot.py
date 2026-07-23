@@ -1,4 +1,18 @@
 import os
+import json
+
+RESULTS_FILE = "results.json"
+
+def load_results():
+    try:
+        with open(RESULTS_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_results(data):
+    with open(RESULTS_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
 import logging
 import asyncio
 import yfinance as yf
@@ -63,16 +77,15 @@ async def generate_forest_signal():
         return "🌲 Forest Scan: No signal yet. Market dey sleep 😴"
     return "\n\n".join(signals)
 
-# 2. BOT HANDLERS
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# 2. BOT HANDLERSasync def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
+        [InlineKeyboardButton("🌲 Get Signal Now", callback_data='signal')],
+        [InlineKeyboardButton("📊 P&L Report", callback_data='pnl')],
         [InlineKeyboardButton("ℹ️ Help & Info", callback_data='help')],
-        [InlineKeyboardButton("🎧 Support", callback_data='support')],
-        [InlineKeyboardButton("📅 Calendar", callback_data='calendar')],
-        [InlineKeyboardButton("🌲 Get Signal Now", callback_data='signal')]
+        [InlineKeyboardButton("🎧 Support", callback_data='support')]
     ]
     await update.message.reply_text('Welcome to Signalbot! 👋\nChoose an option:', reply_markup=InlineKeyboardMarkup(keyboard))
-
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()

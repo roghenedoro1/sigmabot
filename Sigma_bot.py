@@ -11,7 +11,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 
 logging.basicConfig(level=logging.INFO)
 TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_CHAT_ID = 5564269252 # YOUR ID
+ADMIN_CHAT_ID = 5564269252 # CHANGE TO YOUR TELEGRAM ID
 
 PAIRS = {
     "EURUSD": "EURUSD=X",
@@ -33,7 +33,6 @@ def save_results(data):
     with open(RESULTS_FILE, 'w') as f:
         json.dump(data, f, indent=4)
 
-# 1. SIGNAL FUNCTIONS
 async def get_5min_data(symbol):
     try:
         ticker = yf.Ticker(PAIRS[symbol])
@@ -43,8 +42,7 @@ async def get_5min_data(symbol):
     except:
         return pd.DataFrame()
 
-async def generate_forest_signal():
-    signals = []
+async def generate_forest_signal(context):
     for symbol in PAIRS.keys():
         df = await get_5min_data(symbol)
         if len(df) < 200: continue
@@ -72,7 +70,7 @@ async def generate_forest_signal():
 
         if direction:
             trade = {
-                "id": int(datetime.now().timestamp()), # NEW: unique id
+                "id": int(datetime.now().timestamp()),
                 "symbol": symbol,
                 "time": datetime.now().strftime('%Y-%m-%d %H:%M'),
                 "direction": "BUY" if "BUY" in direction else "SELL",
@@ -81,23 +79,22 @@ async def generate_forest_signal():
                 "tp": round(tp, 5),
                 "status": "OPEN"
             }
-
             results = load_results()
             results.append(trade)
             save_results(results)
 
-            signals.append(f"🌲 **FOREST SIGNAL: {symbol}**\nID: `{trade['id']}`\nTime: {trade['time']}\nDirection: {direction}\nEntry: {trade['entry']}\nSL: {trade['sl']}\nTP: {trade['tp']}\nTF: 5M")
+            # SEND SIGNAL + WIN/LOSS BUTTONS
+            keyboard = [
+                [InlineKeyboardButton("✅ WIN", callback_data=f"result_WIN_{trade['id']}")],
+                [InlineKeyboardButton("❌ LOSS", callback_data=f"result_LOSS_{trade['id']}")]
+            ]
+            msg = f"🌲 **FOREST SIGNAL: {trade['symbol']}**\nID: `{trade['id']}`\nTime: {trade['time']}\nDirection: {direction}\nEntry: {trade['entry']}\nSL: {trade['sl']}\nTP: {trade['tp']}\nTF: 5M\n\nMark result:"
+            await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
-    if not signals:
-        return "🌲 Forest Scan: No signal yet. Market dey sleep 😴"
-    return "\n\n".join(signals)
-
-# 2. BOT HANDLERS
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("🌲 Get Signal Now", callback_data='signal')],
         [InlineKeyboardButton("📊 P&L Report", callback_data='pnl')],
-        [InlineKeyboardButton("✅ Mark Result", callback_data='mark')], # NEW BUTTON
         [InlineKeyboardButton("ℹ️ Help & Info", callback_data='help')],
         [InlineKeyboardButton("🎧 Support", callback_data='support')],
         [InlineKeyboardButton("📅 Calendar", callback_data='calendar')]
@@ -110,8 +107,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
 
     if data == 'signal':
-        signal = await generate_forest_signal()
-        await query.edit_message_text(signal, parse_mode='Markdown')
+        await query.edit_message_text("🌲 Scanning market...")
+        await generate_forest_signal(context)
 
     elif data == 'pnl':
         results = load_results()
@@ -130,51 +127,23 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Winrate: {winrate:.2f}%"
         )
 
-    elif data == 'mark': # NEW FUNCTION
-        results = load_results()
-        open_trades = [r for r in results if r['status'] == 'OPEN']
-        if not open_trades:
-            await query.edit_message_text("✅ No open trade to mark.")
-            return
-
-        keyboard = []
-        for trade in open_trades[-5:]: # Show last 5 open trades
-            btn_text = f"{trade['symbol']} {trade['direction']} @ {trade['entry']}"
-            keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"choose_{trade['id']}")])
-        keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data='back')])
-        await query.edit_message_text("Pick trade to mark:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-    elif data.startswith('choose_'):
-        trade_id = int(data.split('_')[1])
-        context.user_data['marking_id'] = trade_id
-        keyboard = [
-            [InlineKeyboardButton("✅ WIN", callback_data='result_WIN')],
-            [InlineKeyboardButton("❌ LOSS", callback_data='result_LOSS')],
-            [InlineKeyboardButton("⬅️ Back", callback_data='mark')]
-        ]
-        await query.edit_message_text("Mark this trade as:", reply_markup=InlineKeyboardMarkup(keyboard))
-
     elif data.startswith('result_'):
-        result = data.split('_')[1]
-        trade_id = context.user_data.get('marking_id')
+        parts = data.split('_')
+        result = parts[1]
+        trade_id = int(parts[2])
         results = load_results()
         for r in results:
             if r['id'] == trade_id:
                 r['status'] = result
                 break
         save_results(results)
-        await query.edit_message_text(f"✅ Trade marked as {result}")
-
-    elif data == 'back':
-        await start(update, context) # Go back to main menu
+        await query.edit_message_text(f"✅ Trade {trade_id} marked as {result}")
 
     elif data == 'help':
-        await query.edit_message_text(text="ℹ️ Use /start to see menu\n\n🌲 Get signal\n📊 See P&L\n✅ Mark Win/Loss")
-
+        await query.edit_message_text(text="ℹ️ Use /start to see menu\n🌲 Get signal\n📊 See P&L")
     elif data == 'support':
         await query.edit_message_text(text="🎧 Type your problem here.")
         context.user_data['waiting_for_support'] = True
-
     elif data == 'calendar':
         await query.edit_message_text(text="📅 Calendar link coming soon.")
 
@@ -189,18 +158,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await update.message.reply_text("Use /start for menu")
 
-# 3. AUTO SIGNAL JOB
 async def send_signals(context: ContextTypes.DEFAULT_TYPE):
-    signal = await generate_forest_signal()
-    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=signal, parse_mode='Markdown')
+    await generate_forest_signal(context)
 
-# 4. MAIN
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.job_queue.run_repeating(send_signals, interval=600, first=10)
+    app.job_queue.run_repeating(send_signals, interval=600, first=10) # Auto every 10mins
     print("Bot is running...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 

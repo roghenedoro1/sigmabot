@@ -127,9 +127,13 @@ async def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # START AUTO SIGNALS every 10 minutes. First signal in 10 seconds
-    app.job_queue.run_repeating(lambda ctx: asyncio.create_task(send_signals_loop(app)), interval=600, first=10)
+    app.job_queue.run_repeating(lambda ctx: asyncio.create_task(send_signals(app)), interval=600, first=10)
 
-    await app.run_polling()
+    # Initialize and start
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling() # use this instead of run_polling
+    await app.updater.idle() # keeps it running
 
 if __name__ == '__main__':
     asyncio.run(main())

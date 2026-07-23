@@ -72,6 +72,7 @@ async def generate_forest_signal():
 
         if direction:
             trade = {
+                "id": int(datetime.now().timestamp()), # NEW: unique id
                 "symbol": symbol,
                 "time": datetime.now().strftime('%Y-%m-%d %H:%M'),
                 "direction": "BUY" if "BUY" in direction else "SELL",
@@ -85,7 +86,7 @@ async def generate_forest_signal():
             results.append(trade)
             save_results(results)
 
-            signals.append(f"🌲 **FOREST SIGNAL: {symbol}**\nTime: {trade['time']}\nDirection: {direction}\nEntry: {trade['entry']}\nSL: {trade['sl']}\nTP: {trade['tp']}\nTF: 5M")
+            signals.append(f"🌲 **FOREST SIGNAL: {symbol}**\nID: `{trade['id']}`\nTime: {trade['time']}\nDirection: {direction}\nEntry: {trade['entry']}\nSL: {trade['sl']}\nTP: {trade['tp']}\nTF: 5M")
 
     if not signals:
         return "🌲 Forest Scan: No signal yet. Market dey sleep 😴"
@@ -96,6 +97,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("🌲 Get Signal Now", callback_data='signal')],
         [InlineKeyboardButton("📊 P&L Report", callback_data='pnl')],
+        [InlineKeyboardButton("✅ Mark Result", callback_data='mark')], # NEW BUTTON
         [InlineKeyboardButton("ℹ️ Help & Info", callback_data='help')],
         [InlineKeyboardButton("🎧 Support", callback_data='support')],
         [InlineKeyboardButton("📅 Calendar", callback_data='calendar')]
@@ -105,12 +107,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    data = query.data
 
-    if query.data == 'signal':
+    if data == 'signal':
         signal = await generate_forest_signal()
         await query.edit_message_text(signal, parse_mode='Markdown')
 
-    elif query.data == 'pnl':
+    elif data == 'pnl':
         results = load_results()
         closed = [r for r in results if r['status']!= 'OPEN']
         wins = len([r for r in closed if r['status'] == 'WIN'])
@@ -127,14 +130,52 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Winrate: {winrate:.2f}%"
         )
 
-    elif query.data == 'help':
-        await query.edit_message_text(text="ℹ️ Use /start to see menu\n\nPress 🌲 to get signal\nPress 📊 to see P&L")
+    elif data == 'mark': # NEW FUNCTION
+        results = load_results()
+        open_trades = [r for r in results if r['status'] == 'OPEN']
+        if not open_trades:
+            await query.edit_message_text("✅ No open trade to mark.")
+            return
 
-    elif query.data == 'support':
+        keyboard = []
+        for trade in open_trades[-5:]: # Show last 5 open trades
+            btn_text = f"{trade['symbol']} {trade['direction']} @ {trade['entry']}"
+            keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"choose_{trade['id']}")])
+        keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data='back')])
+        await query.edit_message_text("Pick trade to mark:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif data.startswith('choose_'):
+        trade_id = int(data.split('_')[1])
+        context.user_data['marking_id'] = trade_id
+        keyboard = [
+            [InlineKeyboardButton("✅ WIN", callback_data='result_WIN')],
+            [InlineKeyboardButton("❌ LOSS", callback_data='result_LOSS')],
+            [InlineKeyboardButton("⬅️ Back", callback_data='mark')]
+        ]
+        await query.edit_message_text("Mark this trade as:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif data.startswith('result_'):
+        result = data.split('_')[1]
+        trade_id = context.user_data.get('marking_id')
+        results = load_results()
+        for r in results:
+            if r['id'] == trade_id:
+                r['status'] = result
+                break
+        save_results(results)
+        await query.edit_message_text(f"✅ Trade marked as {result}")
+
+    elif data == 'back':
+        await start(update, context) # Go back to main menu
+
+    elif data == 'help':
+        await query.edit_message_text(text="ℹ️ Use /start to see menu\n\n🌲 Get signal\n📊 See P&L\n✅ Mark Win/Loss")
+
+    elif data == 'support':
         await query.edit_message_text(text="🎧 Type your problem here.")
         context.user_data['waiting_for_support'] = True
 
-    elif query.data == 'calendar':
+    elif data == 'calendar':
         await query.edit_message_text(text="📅 Calendar link coming soon.")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -159,10 +200,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    # START AUTO SIGNALS every 10 minutes. First signal in 10 seconds
     app.job_queue.run_repeating(send_signals, interval=600, first=10)
-
     print("Bot is running...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 

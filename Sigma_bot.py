@@ -99,13 +99,16 @@ def main():
 
     logging.info("Bot is running with WEBHOOK...")
 
-    # WEBHOOK instead of polling
+    # FIXED WEBHOOK FOR RENDER
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
         url_path=TOKEN,
         webhook_url=f"https://srv-d9h329u7r5hc73968v90.onrender.com/{TOKEN}"
     )
+
+if __name__ == '__main__':
+    main()
 
 if __name__ == '__main__':
     main()

@@ -63,13 +63,7 @@ async def generate_forest_signal():
         return "🌲 Forest Scan: No signal yet. Market dey sleep 😴"
     return "\n\n".join(signals)
 
-async def send_signals(application):
-    while True:
-        await asyncio.sleep(600) # every 10mins
-        signal = await generate_forest_signal()
-        await application.bot.send_message(chat_id=ADMIN_CHAT_ID, text=signal, parse_mode='Markdown')
-
-# 2. BOT HANDLERS - MUST BE BEFORE main()
+# 2. BOT HANDLERS
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("ℹ️ Help & Info", callback_data='help')],
@@ -115,25 +109,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await update.message.reply_text("Use /start for menu")
 
-# 3. MAIN - MUST BE LAST
-async def send_signals_loop(application):
+# 3. AUTO SIGNAL JOB - Render friendly version
+async def send_signals(context: ContextTypes.DEFAULT_TYPE):
     signal = await generate_forest_signal()
-    await application.bot.send_message(chat_id=ADMIN_CHAT_ID, text=signal, parse_mode='Markdown')
+    await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=signal, parse_mode='Markdown')
 
-async def main():
+# 4. MAIN - THE FIX
+def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # START AUTO SIGNALS every 10 minutes. First signal in 10 seconds
-    app.job_queue.run_repeating(lambda ctx: asyncio.create_task(send_signals(app)), interval=600, first=10)
+    app.job_queue.run_repeating(send_signals, interval=600, first=10)
 
-    # Initialize and start
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling() # use this instead of run_polling
-    await app.updater.idle() # keeps it running
+    print("Bot is running...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()

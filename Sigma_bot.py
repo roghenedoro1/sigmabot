@@ -116,15 +116,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Use /start for menu")
 
 # 3. MAIN - MUST BE LAST
-def main():
+async def send_signals_loop(application):
+    signal = await generate_forest_signal()
+    await application.bot.send_message(chat_id=ADMIN_CHAT_ID, text=signal, parse_mode='Markdown')
+
+async def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    asyncio.create_task(send_signals(app)) # START AUTO SIGNALS
+    # START AUTO SIGNALS every 10 minutes. First signal in 10 seconds
+    app.job_queue.run_repeating(lambda ctx: asyncio.create_task(send_signals_loop(app)), interval=600, first=10)
 
-    app.run_polling()
+    await app.run_polling()
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())

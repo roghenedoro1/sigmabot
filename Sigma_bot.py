@@ -10,9 +10,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 
 logging.basicConfig(level=logging.INFO)
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-ADMIN_CHAT_ID = 5564269252
+ADMIN_CHAT_ID = 5564269252 # YOUR ID
 
-# PAIRS MAP FOR YFINANCE
 PAIRS = {
     "EURUSD": "EURUSD=X",
     "GBPUSD": "GBPUSD=X",
@@ -20,20 +19,22 @@ PAIRS = {
     "XAUUSD": "XAUUSD=X"
 }
 
+# 1. SIGNAL FUNCTIONS
 async def get_5min_data(symbol):
-    ticker = yf.Ticker(PAIRS[symbol])
-    df = ticker.history(period="2d", interval="5m")
-    df.dropna(inplace=True)
-    return df
+    try:
+        ticker = yf.Ticker(PAIRS[symbol])
+        df = ticker.history(period="5d", interval="5m")
+        df.dropna(inplace=True)
+        return df
+    except:
+        return pd.DataFrame()
 
 async def generate_forest_signal():
     signals = []
-
     for symbol in PAIRS.keys():
         df = await get_5min_data(symbol)
         if len(df) < 200: continue
 
-        # INDICATORS
         df['EMA50'] = ta.trend.ema_indicator(df['Close'], 50)
         df['EMA200'] = ta.trend.ema_indicator(df['Close'], 200)
         df['RSI'] = ta.momentum.rsi(df['Close'], 14)
@@ -44,14 +45,11 @@ async def generate_forest_signal():
         prev = df.iloc[-2]
 
         direction = None
-        # BUY LOGIC
         if last['EMA50'] > last['EMA200'] and last['RSI'] > 50 and prev['Close'] > prev['High5']:
             direction = "BUY 🔥"
             entry = last['Close']
             sl = entry - (0.0015 if symbol!= "XAUUSD" else 0.30)
             tp = entry + (0.0030 if symbol!= "XAUUSD" else 0.60)
-
-        # SELL LOGIC
         elif last['EMA50'] < last['EMA200'] and last['RSI'] < 50 and prev['Close'] < prev['Low5']:
             direction = "SELL ❄️"
             entry = last['Close']
@@ -59,32 +57,65 @@ async def generate_forest_signal():
             tp = entry - (0.0030 if symbol!= "XAUUSD" else 0.60)
 
         if direction:
-            signals.append(f"""🌲 **FOREST SIGNAL: {symbol}**
-Time: {datetime.now().strftime('%H:%M')}
-Direction: {direction}
-Entry: {entry:.5f}
-SL: {sl:.5f}
-TP: {tp:.5f}
-TF: 5M | Valid for next candle
-""")
+            signals.append(f"🌲 **FOREST SIGNAL: {symbol}**\nTime: {datetime.now().strftime('%H:%M')}\nDirection: {direction}\nEntry: {entry:.5f}\nSL: {sl:.5f}\nTP: {tp:.5f}\nTF: 5M")
 
     if not signals:
         return "🌲 Forest Scan: No signal yet. Market dey sleep 😴"
-
-    return "\n".join(signals)
+    return "\n\n".join(signals)
 
 async def send_signals(application):
     while True:
-        # Send every 10 minutes, 3 mins before :00 :10 :20
-        now = datetime.now()
-        sleep_seconds = 600 - (now.minute % 10 * 60 + now.second) + 180 # 3mins before
-        await asyncio.sleep(sleep_seconds)
-
+        await asyncio.sleep(600) # every 10mins
         signal = await generate_forest_signal()
         await application.bot.send_message(chat_id=ADMIN_CHAT_ID, text=signal, parse_mode='Markdown')
 
-#...KEEP ALL YOUR OLD start, button, handle_message CODE HERE...
+# 2. BOT HANDLERS - MUST BE BEFORE main()
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("ℹ️ Help & Info", callback_data='help')],
+        [InlineKeyboardButton("🎧 Support", callback_data='support')],
+        [InlineKeyboardButton("📅 Calendar", callback_data='calendar')],
+        [InlineKeyboardButton("🌲 Get Signal Now", callback_data='signal')]
+    ]
+    await update.message.reply_text('Welcome to Signalbot! 👋\nChoose an option:', reply_markup=InlineKeyboardMarkup(keyboard))
 
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == 'signal':
+        signal = await generate_forest_signal()
+        await query.edit_message_text(signal, parse_mode='Markdown')
+    elif query.data == 'help':
+        await query.edit_message_text(text="ℹ️ Use /start to see menu")
+    elif query.data == 'support':
+        await query.edit_message_text(text="🎧 Type your problem here.")
+        context.user_data['waiting_for_support'] = True
+    elif query.data == 'calendar':
+        await query.edit_message_text(text="📅 Calendar link soon.")
+    elif query.data.startswith('reply_'):
+        user_id = query.data.split('_')[1]
+        context.user_data['replying_to'] = user_id
+        await query.edit_message_text(f"Type your reply now.")
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get('replying_to'):
+        user_id = context.user_data['replying_to']
+        await context.bot.send_message(chat_id=int(user_id), text=f"📩 Support Reply:\n\n{update.message.text}")
+        await update.message.reply_text("✅ Reply sent!")
+        context.user_data['replying_to'] = None
+        return
+    if context.user_data.get('waiting_for_support'):
+        user_msg = update.message.text
+        user = update.message.from_user
+        keyboard = [[InlineKeyboardButton("↩️ Reply This User", callback_data=f"reply_{user.id}")]]
+        await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"🆘 New Support\nFrom: {user.first_name}\nID: {user.id}\n\n{user_msg}", reply_markup=InlineKeyboardMarkup(keyboard))
+        await update.message.reply_text("✅ Message don reach Support.")
+        context.user_data['waiting_for_support'] = False
+        return
+    await update.message.reply_text("Use /start for menu")
+
+# 3. MAIN - MUST BE LAST
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))

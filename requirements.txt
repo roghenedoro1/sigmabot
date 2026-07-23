@@ -1,4 +1,4 @@
-python-telegram-bot[job-queue]==21.6
+python-telegram-bot[webhooks,job-queue]==21.6
 yfinance==0.2.43
 ta==0.11.0
 pandas==2.2.2

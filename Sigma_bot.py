@@ -12,13 +12,15 @@ app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Bot is alive! Webhook mode working ✅")
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="Bot is alive! ✅ Webhook working")
 
 application.add_handler(CommandHandler("start", start))
 
 @app.route(f"/{TOKEN}", methods=["POST"])
-async def webhook():
-    await application.update_queue.put(Update.de_json(data=request.json, bot=application.bot))
+def webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, application.bot)
+    asyncio.run(application.process_update(update))
     return "ok"
 
 @app.route("/")
@@ -26,7 +28,9 @@ def index():
     return "Bot is running"
 
 async def set_webhook():
+    await application.bot.delete_webhook()
     await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
+    print(f"Webhook set to: {WEBHOOK_URL}/{TOKEN}")
 
 asyncio.run(set_webhook())
 
